@@ -1,20 +1,38 @@
 import sys
 import json
 import asyncio
+import re
 from playwright.async_api import async_playwright
 
-def solve_field(question: str) -> str:
-    q = question.lower()
-    if "name" in q:
+def compute_solution(question_text: str, options: list = None) -> str:
+    """Answers common form and quiz questions."""
+    q = question_text.lower()
+    
+    # Check for math calculations
+    math_match = re.search(r'(\d+)\s*([\+\-\*\/])\s*(\d+)', q)
+    if math_match:
+        a, op, b = int(math_match.group(1)), math_match.group(2), int(math_match.group(3))
+        if op == '+': return str(a + b)
+        if op == '-': return str(a - b)
+        if op == '*': return str(a * b)
+        if op == '/' and b != 0: return str(a // b)
+
+    if any(k in q for k in ["name", "full name"]):
         return "Samarth Shukla"
-    elif "email" in q or "mail" in q:
-        return "samarth@example.com"
+    elif any(k in q for k in ["email", "mail"]):
+        return "samarth.shukla@example.com"
+    elif "capital of france" in q:
+        return "Paris"
     elif "transform" in q or "equation" in q:
         return "y = 2x + 5"
-    elif "2 + 2" in q or "2+2" in q:
-        return "4"
-    else:
-        return "Automated entry via agent"
+    elif any(k in q for k in ["college", "university"]):
+        return "VIT Bhopal University"
+    
+    # If it's a multiple-choice question, pick the first or most relevant option
+    if options:
+        return options[0]
+    
+    return "Automated entry via Webcmd"
 
 async def run(form_url: str):
     async with async_playwright() as p:
@@ -27,48 +45,72 @@ async def run(form_url: str):
         page = context.pages[0] if context.pages else await context.new_page()
         
         await page.goto(form_url, wait_until="networkidle")
-        await page.wait_for_timeout(2000)
+        await page.wait_for_timeout(3000)
 
-        # Wait for any sign-in overlay to disappear if already authenticated
-        sign_in_btn = await page.query_selector('role=button[name="Sign in"], text="SIGN IN"')
-        if sign_in_btn:
-            # If session exists, clicking sign in redirects seamlessly
-            await sign_in_btn.click()
-            await page.wait_for_load_state("networkidle")
-            await page.wait_for_timeout(2000)
+        # Check if still on the login gate
+        if "accounts.google.com" in page.url:
+            print("__AUTH_REQUIRED__")
+            sys.stdout.flush()
+            await page.wait_for_timeout(5000)
+            await context.close()
+            return
 
-        # Extract real questions
-        questions = await page.eval_on_selector_all(
-            'div[role="heading"], .M7eMe',
-            'elements => elements.map(el => el.innerText.trim()).filter(t => t.length > 0)'
-        )
-
-        unique_questions = []
-        for q in questions:
-            clean = q.split("\n")[0].replace("*", "").strip()
-            if clean and clean not in unique_questions and "assessment" not in clean.lower():
-                unique_questions.append(clean)
-
-        inputs = await page.query_selector_all('input[type="text"], textarea')
+        # Target Google Form question blocks directly
+        question_cards = await page.query_selector_all('div[role="listitem"], .Qr7Oae')
         solved = []
 
-        for idx, q_text in enumerate(unique_questions):
-            ans = solve_field(q_text)
-            solved.append({"question": q_text, "answer": ans})
+        if question_cards:
+            for card in question_cards:
+                # Extract question title
+                title_elem = await card.query_selector('.M7eMe, div[role="heading"]')
+                if not title_elem:
+                    continue
+                
+                raw_title = await title_elem.inner_text()
+                clean_title = raw_title.split("\n")[0].replace("*", "").strip()
+                if not clean_title:
+                    continue
 
-            if idx < len(inputs):
-                await inputs[idx].click()
-                await inputs[idx].fill(ans)
-                await page.wait_for_timeout(400)
+                # Check for options (radio buttons)
+                option_elems = await card.query_selector_all('.aDTYNe, .docssharedWidgetHeaderLabel, span.aDTYNe')
+                options = [await opt.inner_text() for opt in option_elems if await opt.inner_text()]
 
-        # Send extracted questions and answers back to main.py
+                # Compute answer
+                ans = compute_solution(clean_title, options)
+                solved.append({"question": clean_title, "answer": ans})
+
+                # Fill Text or Textarea Input
+                text_input = await card.query_selector('input[type="text"], textarea, .whsOnd')
+                if text_input:
+                    await text_input.click()
+                    await text_input.fill(ans)
+                    await page.wait_for_timeout(300)
+                    continue
+
+                # Select Multiple Choice Option if applicable
+                if option_elems:
+                    for opt in option_elems:
+                        txt = await opt.inner_text()
+                        if ans.lower() in txt.lower():
+                            await opt.click()
+                            await page.wait_for_timeout(300)
+                            break
+        else:
+            # Fallback for simple/standard HTML forms
+            inputs = await page.query_selector_all('input[type="text"], textarea')
+            for i, inp in enumerate(inputs):
+                ans = "Sample Response"
+                await inp.fill(ans)
+                solved.append({"question": f"Field #{i+1}", "answer": ans})
+
+        # Output structured JSON for FastAPI backend
         print("__RESULT_JSON__" + json.dumps(solved))
         sys.stdout.flush()
 
-        # Keep browser open to allow inspection before closing
+        # Hold browser open for visual review
         await page.wait_for_timeout(10000)
         await context.close()
 
 if __name__ == "__main__":
-    url = sys.argv[1] if len(sys.argv) > 1 else "https://forms.gle/jjmbNYPcAD4jN4mF8"
+    url = sys.argv[1] if len(sys.argv) > 1 else "https://forms.gle/pwTKmCLhb9HNPX8o8"
     asyncio.run(run(url))

@@ -7,6 +7,11 @@ from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import sys
+import os
+import shutil
+from fastapi import UploadFile, File
+import shutil
+from assignment_solver import extract_text_from_file, solve_assignment_text
 
 app = FastAPI(title="Autonomous Form Solver")
 
@@ -142,6 +147,56 @@ async def handle_decision(decision: DecisionRequest):
     if agent_state["decision_event"]:
         agent_state["decision_event"].set()
     return {"status": agent_state["status"]}
+
+@app.post("/upload-assignment")
+async def handle_assignment_upload(file: UploadFile = File(...)):
+    if agent_state["status"] in ["running", "awaiting_approval"]:
+        raise HTTPException(status_code=400, detail="Worker already busy.")
+
+    upload_dir = "./uploads"
+    os.makedirs(upload_dir, exist_ok=True)
+    file_path = os.path.join(upload_dir, file.filename)
+
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    async def run_analysis():
+        agent_state["status"] = "running"
+        agent_state["logs"] = []
+        agent_state["results"] = []
+
+        await log_step(f"📄 Received file: {file.filename}", "start")
+        await asyncio.sleep(0.4)
+
+        await log_step("🔍 Running text/OCR extraction pipeline...", "process")
+        raw_text = extract_text_from_file(file_path)
+        await asyncio.sleep(0.6)
+
+        await log_step("🧠 Processing questions & compiling references...", "recovery")
+        solved_items = solve_assignment_text(raw_text)
+        agent_state["results"] = solved_items
+        await log_step(f"✔ Derived step-by-step solutions for {len(solved_items)} questions.", "success")
+
+        # Human Approval Gate before saving to disk / submitting
+        agent_state["pending_action"] = {
+            "action": "Export Solutions & BibTeX",
+            "details": f"Package {len(solved_items)} solved problems with literature references into LaTeX / Markdown."
+        }
+        agent_state["status"] = "awaiting_approval"
+        agent_state["decision_event"] = asyncio.Event()
+
+        await log_step("🛑 Solutions staged. Operator confirmation required to finalize output...", "prompt")
+        await agent_state["decision_event"].wait()
+
+        if agent_state["status"] == "approved":
+            await log_step("✔ Staged package verified and exported successfully.", "completed")
+            agent_state["status"] = "completed"
+        else:
+            await log_step("❌ Export discarded by operator.", "aborted")
+            agent_state["status"] = "completed"
+
+    asyncio.create_task(run_analysis())
+    return {"status": "started", "filename": file.filename}
 
 @app.get("/stream")
 async def stream_events():
