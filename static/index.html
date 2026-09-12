@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Agentic Browser Assistant // Webcmd</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { background-color: #0d1117; color: #e6edf3; font-family: ui-sans-serif, system-ui, sans-serif; }
+    .terminal-scroll::-webkit-scrollbar { width: 6px; }
+    .terminal-scroll::-webkit-scrollbar-thumb { background: #30363d; border-radius: 4px; }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col items-center p-6 md:p-10">
+
+  <header class="w-full max-w-5xl flex items-center justify-between pb-6 border-b border-gray-800">
+    <div class="flex items-center gap-3">
+      <div class="w-3.5 h-3.5 rounded-full bg-emerald-500 animate-pulse"></div>
+      <h1 class="text-xl font-semibold tracking-tight text-white">BrowserAgent <span class="text-xs font-mono px-2 py-0.5 rounded bg-gray-800 text-gray-400">Webcmd Powered</span></h1>
+    </div>
+    <div id="statusBadge" class="text-xs font-mono uppercase tracking-wider px-2.5 py-1 rounded bg-gray-800 text-gray-400 border border-gray-700">
+      IDLE
+    </div>
+  </header>
+
+  <main class="w-full max-w-5xl grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
+    <!-- Left Column: Open-ended Prompt -->
+    <div class="md:col-span-1 bg-gray-900/60 border border-gray-800 p-5 rounded-xl h-fit">
+      <h2 class="text-sm font-medium text-gray-300 mb-3">Natural Language Objective</h2>
+      
+      <div class="space-y-4">
+        <div>
+          <label class="block text-xs font-mono text-gray-400 mb-1">Task Prompt</label>
+          <textarea id="promptInput" rows="3" class="w-full text-sm bg-gray-950 border border-gray-800 rounded p-2.5 text-white focus:outline-none focus:border-emerald-500">top gyms near me</textarea>
+        </div>
+
+        <div>
+          <label class="block text-xs font-mono text-gray-400 mb-1">Context Location</label>
+          <input id="locInput" type="text" value="Kothri Kalan, Madhya Pradesh" class="w-full text-sm bg-gray-950 border border-gray-800 rounded px-3 py-2 text-white focus:outline-none focus:border-emerald-500"/>
+        </div>
+
+        <button id="runBtn" onclick="submitAgentTask()" class="w-full py-2.5 px-4 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-sm transition flex items-center justify-center gap-2">
+          <span>Run Browser Agent</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Right Column: Logs & Dynamic Cards -->
+    <div class="md:col-span-2 flex flex-col gap-4">
+      <!-- Human-in-the-Loop Confirmation Banner -->
+      <div id="approvalCard" class="hidden bg-amber-950/40 border border-amber-500/50 rounded-xl p-5 shadow-lg">
+        <div class="flex items-center gap-2 text-amber-400 text-sm font-semibold mb-1">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+          Sensitive Action Staged (Human Approval Required)
+        </div>
+        <p id="approvalDetails" class="text-xs text-gray-300 mb-4 font-mono"></p>
+        <div class="flex gap-3">
+          <button onclick="sendDecision(true)" class="flex-1 py-2 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs tracking-wide">CONFIRM DISPATCH</button>
+          <button onclick="sendDecision(false)" class="flex-1 py-2 rounded bg-gray-800 hover:bg-gray-700 text-gray-300 font-semibold text-xs tracking-wide">DISCARD</button>
+        </div>
+      </div>
+
+      <!-- Live Structured Results Grid -->
+      <div id="resultsCard" class="hidden bg-gray-900/40 border border-gray-800 rounded-xl p-4">
+        <h3 class="text-xs font-mono text-emerald-400 uppercase tracking-wider mb-3">Extracted Venues</h3>
+        <div id="resultsGrid" class="space-y-2.5"></div>
+      </div>
+
+      <!-- Execution Log Console -->
+      <div class="bg-gray-950 border border-gray-800 rounded-xl p-4 flex flex-col flex-1 min-h-[260px]">
+        <div class="flex items-center justify-between pb-3 mb-3 border-b border-gray-800 text-xs font-mono text-gray-500">
+          <span>Agent Execution Trace</span>
+          <span>Webcmd / STDIO</span>
+        </div>
+        <div id="logs" class="terminal-scroll flex-1 overflow-y-auto space-y-2 text-xs font-mono max-h-[300px]">
+          <div class="text-gray-600">// Agent idle. Enter an objective to run...</div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    let evtSource = null;
+
+    async function submitAgentTask() {
+      const runBtn = document.getElementById("runBtn");
+      runBtn.disabled = true;
+      runBtn.classList.add("opacity-50", "cursor-not-allowed");
+      document.getElementById("approvalCard").classList.add("hidden");
+      document.getElementById("resultsCard").classList.add("hidden");
+      document.getElementById("logs").innerHTML = "";
+
+      const body = {
+        query: document.getElementById("promptInput").value,
+        location_override: document.getElementById("locInput").value
+      };
+
+      await fetch("/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+
+      startEventStream();
+    }
+
+    function startEventStream() {
+      if (evtSource) evtSource.close();
+      evtSource = new EventSource("/stream");
+
+      evtSource.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        const statusBadge = document.getElementById("statusBadge");
+
+        if (data.status) {
+          statusBadge.innerText = data.status.replace("_", " ");
+          if (data.status === "awaiting_approval") {
+            statusBadge.className = "text-xs font-mono uppercase tracking-wider px-2.5 py-1 rounded bg-amber-950 border border-amber-600 text-amber-400";
+            if (data.pending) {
+              document.getElementById("approvalDetails").innerText = `${data.pending.action}: ${data.pending.details}`;
+              document.getElementById("approvalCard").classList.remove("hidden");
+            }
+          } else if (data.status === "completed") {
+            statusBadge.className = "text-xs font-mono uppercase tracking-wider px-2.5 py-1 rounded bg-emerald-950 border border-emerald-600 text-emerald-400";
+            resetBtn();
+          }
+        }
+
+        if (data.results && data.results.length > 0) {
+          renderResults(data.results);
+        }
+
+        if (data.log) {
+          const logDiv = document.createElement("div");
+          logDiv.className = "leading-relaxed";
+          if (data.log.stage === "warning") logDiv.className += " text-amber-400";
+          else if (data.log.stage === "recovery") logDiv.className += " text-cyan-400";
+          else if (data.log.stage === "success") logDiv.className += " text-emerald-400";
+          else if (data.log.stage === "aborted") logDiv.className += " text-rose-400";
+          else logDiv.className += " text-gray-300";
+
+          logDiv.innerText = `[${new Date().toLocaleTimeString()}] ${data.log.message}`;
+          document.getElementById("logs").appendChild(logDiv);
+          logDiv.scrollIntoView({ behavior: 'smooth' });
+        }
+      };
+    }
+
+    function renderResults(items) {
+      const container = document.getElementById("resultsGrid");
+      container.innerHTML = "";
+      items.forEach(item => {
+        const card = document.createElement("div");
+        card.className = "p-3 bg-gray-950/70 border border-gray-800 rounded flex justify-between items-center text-xs";
+        card.innerHTML = `
+          <div>
+            <div class="font-semibold text-white">${item.name || item.title}</div>
+            <div class="text-gray-400 text-[11px] mt-0.5">${item.address || item.snippet}</div>
+          </div>
+          <span class="px-2 py-1 bg-emerald-950/60 border border-emerald-800 text-emerald-400 rounded font-mono font-bold">${item.rating || 'Verified'}</span>
+        `;
+        container.appendChild(card);
+      });
+      document.getElementById("resultsCard").classList.remove("hidden");
+    }
+
+    async function sendDecision(approved) {
+      document.getElementById("approvalCard").classList.add("hidden");
+      await fetch("/decide", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ approved })
+      });
+    }
+
+    function resetBtn() {
+      const runBtn = document.getElementById("runBtn");
+      runBtn.disabled = false;
+      runBtn.classList.remove("opacity-50", "cursor-not-allowed");
+      if (evtSource) evtSource.close();
+    }
+  </script>
+</body>
+</html>

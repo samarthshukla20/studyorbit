@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>ComponentHub Direct (Vendor Sandbox)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 p-8 font-sans">
+  <div class="max-w-3xl mx-auto bg-white p-6 rounded-lg shadow">
+    <div class="flex justify-between items-center border-b pb-4 mb-6">
+      <h1 class="text-2xl font-bold text-gray-800">ComponentHub Direct</h1>
+      <div id="cartCount" class="bg-blue-600 text-white text-xs px-3 py-1.5 rounded-full font-bold">
+        Cart: 0 items
+      </div>
+    </div>
+
+    <div class="space-y-4">
+      <div class="flex justify-between items-center p-4 border rounded" id="product-esp32">
+        <div>
+          <h2 class="font-bold text-gray-900" id="item-title">ESP32-WROOM-32E</h2>
+          <p class="text-sm text-red-500 font-medium" id="stock-status">Status: Out of Stock</p>
+          <span class="text-xs text-gray-500">SKU: ESP32-WROOM-32E</span>
+        </div>
+        <button id="add-btn-primary" disabled class="bg-gray-300 text-gray-500 px-4 py-2 rounded cursor-not-allowed text-sm font-semibold">
+          Out of Stock
+        </button>
+      </div>
+
+      <div class="flex justify-between items-center p-4 border rounded border-emerald-300 bg-emerald-50/30" id="product-alt">
+        <div>
+          <h2 class="font-bold text-gray-900">ESP32-WROOM-32D (Compatible Replacement)</h2>
+          <p class="text-sm text-emerald-600 font-medium">Status: In Stock (250+ units)</p>
+          <span class="text-xs text-gray-500">SKU: ESP32-WROOM-32D • $3.80/unit</span>
+        </div>
+        <button id="add-btn-alt" onclick="addToCart('ESP32-WROOM-32D', 3.80)" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded text-sm font-semibold">
+          Add to Cart
+        </button>
+      </div>
+    </div>
+
+    <div id="cartSummary" class="hidden mt-6 p-4 bg-gray-50 border rounded text-sm">
+      <h3 class="font-bold text-gray-700 mb-1">Staged Order Checkout</h3>
+      <p id="stagedItemText" class="text-gray-600 font-mono"></p>
+    </div>
+  </div>
+
+  <script>
+    let count = 0;
+    function addToCart(sku, price) {
+      count += 10;
+      document.getElementById('cartCount').innerText = `Cart: ${count} items`;
+      const summary = document.getElementById('cartSummary');
+      summary.classList.remove('hidden');
+      document.getElementById('stagedItemText').innerText = `Staged: 10x ${sku} @ $${price}/unit. Ready for checkout.`;
+    }
+  </script>
+</body>
+</html>

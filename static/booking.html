@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Venue Reservation Portal</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-900 text-gray-100 p-8 font-sans">
+  <div class="max-w-xl mx-auto bg-gray-950 p-6 rounded-xl border border-gray-800 shadow-2xl">
+    <div class="flex items-center justify-between pb-4 mb-4 border-b border-gray-800">
+      <h1 id="venueTitle" class="text-lg font-bold text-emerald-400">Venue Direct Portal</h1>
+      <span class="text-xs bg-emerald-950 text-emerald-300 border border-emerald-800 px-2 py-0.5 rounded font-mono">LIVE AGENT TARGET</span>
+    </div>
+
+    <form id="bookingForm" class="space-y-4 text-xs font-mono">
+      <div>
+        <label class="block text-gray-400 mb-1">Lead Visitor Name</label>
+        <input id="guestName" type="text" placeholder="Pending Agent Entry..." class="w-full bg-gray-900 border border-gray-800 rounded p-2 text-white" />
+      </div>
+
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="block text-gray-400 mb-1">Pass Count / Guests</label>
+          <input id="guestCount" type="number" value="1" class="w-full bg-gray-900 border border-gray-800 rounded p-2 text-white" />
+        </div>
+        <div>
+          <label class="block text-gray-400 mb-1">Date</label>
+          <input id="visitDate" type="date" class="w-full bg-gray-900 border border-gray-800 rounded p-2 text-white" />
+        </div>
+      </div>
+
+      <div>
+        <label class="block text-gray-400 mb-1">Special Requirements / Notes</label>
+        <textarea id="guestNotes" rows="2" placeholder="Pending Agent Entry..." class="w-full bg-gray-900 border border-gray-800 rounded p-2 text-white"></textarea>
+      </div>
+
+      <div id="stagedNotice" class="hidden p-3 rounded bg-amber-950/40 border border-amber-500/40 text-amber-300">
+        ✔ Form staged by Webcmd browser worker. Ready for final submission.
+      </div>
+
+      <button type="button" id="submitBtn" class="w-full py-2.5 rounded bg-emerald-600 font-bold text-white tracking-wide">
+        SUBMIT RESERVATION
+      </button>
+    </form>
+  </div>
+</body>
+</html>
